@@ -1,0 +1,29 @@
+Field,Type,Score
+Station_ID,error,"Number of classes, 369, does not match size of target_names, 980. Try specifying the labels parameter"
+Feature_Origin,classification,0.9800884955752213
+Slip_Sense,error,"Number of classes, 8, does not match size of target_names, 10. Try specifying the labels parameter"
+Scarp_Facing_Direction,error,"Number of classes, 5, does not match size of target_names, 8. Try specifying the labels parameter"
+Local_Fault_Dip,error,"Number of classes, 5, does not match size of target_names, 11. Try specifying the labels parameter"
+Local_Fault_Azimuth_Degrees,regression,0.28702179803637295
+Slip_Azimuth,regression,0.3350808122677479
+Fault_Slip_Measurement_Type,classification,0.8947368421052632
+Heave_cm,regression,0.5733797302584305
+Heave_min_cm,error,"Number of classes, 8, does not match size of target_names, 15. Try specifying the labels parameter"
+Heave_max_cm,error,"Number of classes, 11, does not match size of target_names, 23. Try specifying the labels parameter"
+Rupture_Expression,error,"Number of classes, 14, does not match size of target_names, 21. Try specifying the labels parameter"
+Rupture_Width_m,regression,-0.30660121878554536
+Rupture_Width_Min_m,error,"Number of classes, 13, does not match size of target_names, 22. Try specifying the labels parameter"
+Rupture_Width_Max_m,regression,0.510625352104561
+VM_Slip_Azimuth,regression,0.5329065177056134
+Plunge,error,"Number of classes, 4, does not match size of target_names, 10. Try specifying the labels parameter"
+Net_Slip_Preferred_cm,regression,0.5045586825380209
+Net_Slip_Min_cm,error,"Number of classes, 8, does not match size of target_names, 22. Try specifying the labels parameter"
+Net_Slip_Max_cm,error,"Number of classes, 9, does not match size of target_names, 23. Try specifying the labels parameter"
+Vector_Offset_Feature_Notes,error,"Number of classes, 20, does not match size of target_names, 67. Try specifying the labels parameter"
+Horizontal_Separation_cm,regression,0.5262672492330449
+Horizontal_Separation_Min_cm,regression,0.35661373575690125
+Horizontal_Separation_Max_cm,regression,0.5969282959029398
+Vertical_Separation_cm,regression,0.00022782938110799122
+Vertical_Separation_Min_cm,regression,0.5601010676229695
+Vertical_Separation_Max_cm,regression,0.40257585841931076
+Date_of_Movement,error,"Number of classes, 510, does not match size of target_names, 951. Try specifying the labels parameter"
