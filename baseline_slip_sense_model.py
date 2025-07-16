@@ -4,6 +4,8 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import classification_report, accuracy_score
+from sklearn.utils.multiclass import unique_labels
+# This script trains a machine learning model to classify earthquake slip sense
 
 # Load the consolidated dataset, which contains both Napa and Ridgecrest observations 
 df = pd.read_csv("consolidated_earthquake_observations_20250703.csv")
@@ -51,3 +53,15 @@ print ("Accuracy:", accuracy_score(y_test,y_pred))
 print("\nClassification Report:\n") 
 print(classification_report(y_test, y_pred, target_names=label_encoder.classes))
 # Save the model and vectorizer for future use
+
+# Print classification report
+print("\nClassification Report:\n")
+labels = unique_labels(y_test, y_pred)
+print(classification_report(
+    y_test, 
+    y_pred, 
+    labels=labels,
+    target_names=label_encoder.classes_[labels],
+    zero_division=0
+))
+# Save the trained model and vectorizer for future use

@@ -1,0 +1,13 @@
+# Ignore virtual environments
+venv/
+**/venv/
+
+# Ignore Python bytecode
+__pycache__/
+*.py[cod]
+
+# Ignore Jupyter checkpoints
+.ipynb_checkpoints/
+
+# Ignore macOS Finder metadata
+.DS_Store
