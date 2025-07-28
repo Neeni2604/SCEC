@@ -1,0 +1,2 @@
+- In the baseline_ml_model folder, there is a file called baseline_ml_model.py that contains an ML model that trains on the Napa and Ridgecrest data.
+- In the 'Mapping to Current' folder, there is a file called mapping.py that maps the Napa and Riddgecrest data to the Current Schema. The migrated datasets are available in the root directory.
