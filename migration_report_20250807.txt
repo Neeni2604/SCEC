@@ -1,15 +1,15 @@
 EARTHQUAKE DATA MIGRATION REPORT
 ==================================================
-Migration Date: 2025-08-07 02:29:46
+Migration Date: 2025-08-07 13:40:10
 
 INPUT DATASETS:
   Napa (2014): 1222 records, 21 fields
   Ridgecrest (2019): 1130 records, 63 fields
 
 OUTPUT DATASETS:
-  Napa mapped: 1222 records, 58 columns
-  Ridgecrest mapped: 1130 records, 58 columns
-  Consolidated: 2352 records, 58 columns
+  Napa mapped: 1222 records, 70 columns
+  Ridgecrest mapped: 1130 records, 70 columns
+  Consolidated: 2352 records, 70 columns
 
 STRUCTURAL DATA PRESERVATION:
   - Location data preserved in dedicated columns (_latitude, _longitude)
@@ -19,8 +19,8 @@ STRUCTURAL DATA PRESERVATION:
   - All new columns marked with underscore prefix for identification
 
 FIELD MAPPING SUMMARY:
-  Napa - Direct mappings: 11, New columns: 9
-  Ridgecrest - Direct mappings: 30, New columns: 18
+  Napa - Direct mappings: 14, New columns: 7
+  Ridgecrest - Direct mappings: 44, New columns: 18
 
 CRITICAL IMPROVEMENTS:
   - FIXED: Location data now in dedicated columns (was in Notes)

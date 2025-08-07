@@ -19,26 +19,26 @@ class EarthquakeDataMapper:
     def __init__(self):
         self.napa_mapping = {
             'stnid': 'Station_ID', 
-            'intid': None, 
-            'observer': 'Creator',  
-            'obs_date': 'Date_of_Movement',  
-            'origin': 'Feature_Origin',  
-            'latitude': '_latitude', 
-            'longitude': '_longitude',  
-            'orig_lat': '_orig_lat', 
-            'orig_lon': '_orig_lon', 
-            'description': 'Notes',
+            'intid': 'OBJECTID', 
             'citation': '_citation', 
-            'photo': '_photo', 
+            'obs_date': 'CreationDate',  
+            'latitude': '_latitude', 
+            'longitude': '_longitude',
+            'orig_lat': '_orig_lat', 
+            'orig_lon': '_orig_lon',
+            'photo': '_napa_photo_exists', 
+            'observer': 'Creator',  
+            'observed_feature': '_observed_feature',
+            'description': 'Notes',
             'fault_azimuth': 'Local_Fault_Azimuth_Degrees',
-            'ss_displacement': 'Horizontal_Separation_cm',
+            'ss_displacement': 'Net_Slip_Preffered_cm',
             'ss_sense': 'Slip_Sense',
             'ext_offset': 'Heave_cm', 
-            'comp_offset': '_comp_offset', 
+            'comp_offset': 'Horizontal_Separation_cm', 
             'vert_offset': 'Vertical_Separation_cm',
             'upthrown_side': 'Scarp_Facing_Direction',
-            'observed_feature': '_observed_feature', 
-            'trace': '_trace', 
+            'trace': 'Rupture_Expression',
+            'origin': 'Feature_Origin',    
         }
         
         self.ridgecrest_mapping = {
@@ -54,34 +54,34 @@ class EarthquakeDataMapper:
             'source' : '_source',  
             'citation' : '_citation',  
             'description' : 'Notes',
-            # 'fault_az_min' : '_fault_az_min', 
+            'fault_az_min' : 'fault_az_min_L', 
             'fault_az_pref' : 'Local_Fault_Azimuth_Degrees',
-            # 'fault_az_max' : '_fault_az_max',  
-            # 'fault_dip_min' : '_fault_dip_min',
+            'fault_az_max' : 'fault_az_max_L',  
+            'fault_dip_min' : 'fault_dip_min_L',
             'fault_dip_pref' : 'Local_Fault_Dip',
-            # 'fault_dip_max' : '_fault_dip_max',  
-            # 'local_frac_az_min' : '_local_frac_az_min',  
+            'fault_dip_max' : 'fault_dip_max_L',  
+            'local_frac_az_min' : 'local_frac_az_min_L',  
             'local_frac_az_pref' : 'Local_Fault_Azimuth_Degrees',
-            # 'local_frac_az_max' : '_local_frac_az_max', 
+            'local_frac_az_max' : 'local_frac_az_max_L', 
             'rup_width_min' : 'Rupture_Width_Min_m',
             'rupture_width_pref' : 'Rupture_Width_m',
             'rup_width_max' : 'Rupture_Width_Max_m',
             'fault_expression' : 'Rupture_Expression',
             'scarp_facing_direction' : 'Scarp_Facing_Direction',
-            # 'striations_observed' : '_striations_observed',
-            # 'gouge_observed' : '_gouge_observed',
+            'striations_observed' : 'striations_observed_L',
+            'gouge_observed' : 'gouge_observed_L',
             'sense' : 'Slip_Sense',
             'observed_feature' : '_observed_feature',
             'feature_type' : '_feature_type',
             'vector_length_min' : 'Net_Slip_Min_cm',
             'vector_length_pref' : 'Net_Slip_Preferred_cm',
             'vector_length_max' : 'Net_Slip_Max_cm',
-            # 'vect_plunge_min' : '_vect_plunge_min',
+            'vect_plunge_min' : 'vect_plunge_min_L',
             'vect_plunge_pref' : 'Plunge',
-            # 'vect_plunge_max' : '_vect_plunge_max',
-            # 'vect_az_min' : '_vect_az_min',
+            'vect_plunge_max' : 'vect_plunge_max_L',
+            'vect_az_min' : 'vect_az_min_L',
             'vect_az_pref' : 'VM_Slip_Azimuth',
-            # 'vect_az_max' : '_vect_az_max',
+            'vect_az_max' : 'vect_az_max_L',
             'aperture_min' : '_aperture_min',
             'aperture_pref' : '_aperture_pref',
             'aperture_max' : '_aperture_max',
@@ -89,9 +89,9 @@ class EarthquakeDataMapper:
             'horiz_offset_pref' : 'Horizontal_Separation_cm',
             'horiz_offset_max' : 'Horizontal_Separation_Max_cm',
             'horiz_slip_type' : 'Fault_Slip_Measurement_Type',
-            # 'horiz_az_min' : '_horiz_az_min', 
+            'horiz_az_min' : 'horiz_az_min_L', 
             'horiz_az_pref' : 'Slip_Azimuth',
-            # 'horiz_az_max' : '_horiz_az_max',
+            'horiz_az_max' : 'horiz_az_max_L',
             'vert_offset_min' : 'Vertical_Separation_Min_cm',
             'vert_offset_pref' : 'Vertical_Separation_cm',
             'vert_offset_max' : 'Vertical_Separation_Max_cm',
@@ -119,7 +119,10 @@ class EarthquakeDataMapper:
             'Horizontal_Separation_cm', 'Horizontal_Separation_Min_cm', 'Horizontal_Separation_Max_cm',
             'Vertical_Separation_cm', 'Vertical_Separation_Min_cm', 'Vertical_Separation_Max_cm',
             'Slip_Offset_Feature_Notes','GlobalID',
-            'CreationDate', 'Creator', 'EditDate', 'Editor'
+            'CreationDate', 'Creator', 'EditDate', 'Editor', 
+            'fault_az_min_L', 'fault_az_max_L', 'fault_dip_min_L', 'fault_dip_max_L', 'local_frac_az_min_L', 'local_frac_az_max_L', 
+            'striations_observed_L', 'gouge_observed_L', 'vect_plunge_min_L', 'vect_plunge_max_L', 'vect_az_min_L',
+            'vect_az_max_L', 'horiz_az_min_L', 'horiz_az_max_L',
         ]
 
     def get_extended_schema_fields(self, mapping):
@@ -197,11 +200,6 @@ class EarthquakeDataMapper:
                 if current_field and napa_field in row:
                     mapped_row[current_field] = row[napa_field]
             
-            # Set default values for system fields
-            # mapped_row['CreationDate'] = datetime.now()
-            # mapped_row['EditDate'] = datetime.now()
-            # mapped_row['Editor'] = 'Napa_Migration'
-            
             # Add dataset source identifier to Notes
             existing_notes = mapped_row.get('Notes', '')
             if existing_notes:
@@ -233,11 +231,7 @@ class EarthquakeDataMapper:
             for ridgecrest_field, current_field in self.ridgecrest_mapping.items():
                 if current_field and ridgecrest_field in row:
                     mapped_row[current_field] = row[ridgecrest_field]
-            
-            # Set default values for system fields
-            # mapped_row['CreationDate'] = datetime.now()
-            # mapped_row['EditDate'] = datetime.now() 
-            # mapped_row['Editor'] = 'Ridgecrest_Migration'
+
             
             # Add dataset source identifier to Notes
             existing_notes = mapped_row.get('Notes', '')
