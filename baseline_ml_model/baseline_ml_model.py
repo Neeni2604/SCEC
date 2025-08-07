@@ -1,514 +1,477 @@
 """
-Simple ML Model for Earthquake Field Data
-Predicts Slip_Sense and Rupture_Expression from Notes field
-Tests accuracy against real earthquake data
+Enhanced ML Model for Earthquake Field Data - Current Schema
+Predicts multiple geological and metadata fields from Notes field
+Uses combined Napa (2014) and Ridgecrest (2019) earthquake datasets
 """
 
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
+from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+from sklearn.multiclass import OneVsRestClassifier
+from sklearn.preprocessing import LabelEncoder
+from sklearn.metrics import classification_report, accuracy_score, confusion_matrix
+from sklearn.pipeline import Pipeline
 import re
 import warnings
+from datetime import datetime
+import matplotlib.pyplot as plt
+import seaborn as sns
+
 warnings.filterwarnings('ignore')
 
-class SimpleEarthquakePredictor:
-    """Simple ML predictor for 2 earthquake fields from text notes"""
+class EnhancedEarthquakeFieldDataML:
+    """Enhanced ML model for predicting earthquake field data from Notes"""
     
     def __init__(self):
-        # Text vectorizer - keep it simple
+        # Enhanced text vectorizer with optimized parameters
         self.vectorizer = TfidfVectorizer(
-            max_features=300,
+            max_features=2000,
             stop_words='english',
-            ngram_range=(1, 2),
+            ngram_range=(1, 3),  # Include trigrams for better context
             lowercase=True,
-            min_df=2
+            min_df=2,
+            max_df=0.95,
+            sublinear_tf=True
         )
         
-        # Simple models
-        self.slip_model = RandomForestClassifier(n_estimators=50, random_state=42)
-        self.rupture_model = RandomForestClassifier(n_estimators=50, random_state=42)
+        self.models = {}
+        self.label_encoders = {}
+        self.feature_importances = {}
         
-        self.is_fitted = False
-    
-    def clean_text(self, text):
-        """Clean and preprocess text"""
-        if not isinstance(text, str):
+        # Target fields organized by category for better analysis
+        self.target_fields = {
+            'geological': [
+                'Feature_Origin',
+                'Slip_Sense', 
+                'Scarp_Facing_Direction',
+                'Rupture_Expression',
+                '_feature_type',
+                '_gouge_observed',
+                '_striations_observed'
+            ],
+            'measurements': [
+                'Local_Fault_Azimuth_Degrees',
+                'Local_Fault_Dip',
+                'Heave_cm',
+                'Horizontal_Separation_cm',
+                'Vertical_Separation_cm',
+                'Net_Slip_Preferred_cm'
+            ],
+            'metadata': [
+                'Creator',
+                '_obs_affiliation',
+                '_team',
+                '_observed_feature',
+                '_source'
+            ]
+        }
+        
+        # Flatten all target fields
+        self.all_target_fields = []
+        for category in self.target_fields.values():
+            self.all_target_fields.extend(category)
+
+    def preprocess_text(self, text):
+        """Enhanced text preprocessing"""
+        if not isinstance(text, str) or pd.isna(text):
             return ""
         
-        # Remove source prefix
+        # Remove source prefix that was added during mapping
         text = re.sub(r'^Source:\s*\w+\s*\d{4};\s*', '', text)
+        
+        # Clean common field notation patterns
+        text = re.sub(r'\b\d+[°]\b', ' degrees ', text)  # Replace degree symbols
+        text = re.sub(r'\b\d+\s*cm\b', ' centimeters ', text)  # Standardize cm references
+        text = re.sub(r'\b\d+\s*m\b', ' meters ', text)  # Standardize m references
+        
+        # Standardize directional terms
+        directional_mapping = {
+            r'\bNE\b': 'northeast',
+            r'\bNW\b': 'northwest', 
+            r'\bSE\b': 'southeast',
+            r'\bSW\b': 'southwest',
+            r'\bN\b': 'north',
+            r'\bS\b': 'south',
+            r'\bE\b': 'east',
+            r'\bW\b': 'west'
+        }
+        for pattern, replacement in directional_mapping.items():
+            text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
+        
+        # Clean and normalize
         text = text.lower()
         text = re.sub(r'[^\w\s]', ' ', text)
         text = re.sub(r'\s+', ' ', text)
         return text.strip()
-    
-    def prepare_labels(self, df):
-        """Clean and standardize labels"""
-        # Clean Slip_Sense
-        slip_sense = df['Slip_Sense'].fillna('unknown').astype(str).str.lower().str.strip()
+
+    def categorize_numeric_field(self, series, field_name):
+        """Convert numeric fields to categorical ranges for better prediction"""
+        def categorize_value(val):
+            if pd.isna(val) or val == '' or str(val).lower() in ['nan', 'unknown', 'null']:
+                return 'UNKNOWN'
+            
+            try:
+                # Extract numeric value
+                if isinstance(val, str):
+                    # Handle ranges like "1-2", ">5", "<1", "~3"
+                    val_clean = re.sub(r'[^\d.]', '', val)
+                    if not val_clean:
+                        return 'UNKNOWN'
+                    val = float(val_clean)
+                
+                val = float(val)
+                
+                # Categorize based on field type
+                if 'azimuth' in field_name.lower() or 'degrees' in field_name.lower():
+                    # Azimuth categorization
+                    if 0 <= val < 45 or 315 <= val <= 360:
+                        return 'N (0-45°, 315-360°)'
+                    elif 45 <= val < 135:
+                        return 'E (45-135°)'
+                    elif 135 <= val < 225:
+                        return 'S (135-225°)'
+                    elif 225 <= val < 315:
+                        return 'W (225-315°)'
+                    else:
+                        return 'UNKNOWN'
+                        
+                elif 'dip' in field_name.lower():
+                    # Dip categorization
+                    if val < 30:
+                        return 'Shallow (<30°)'
+                    elif val < 60:
+                        return 'Moderate (30-60°)'
+                    elif val <= 90:
+                        return 'Steep (60-90°)'
+                    else:
+                        return 'UNKNOWN'
+                        
+                else:
+                    # General measurement categorization
+                    if val == 0:
+                        return 'None (0)'
+                    elif val < 1:
+                        return 'Very Small (<1)'
+                    elif val < 5:
+                        return 'Small (1-5)'
+                    elif val < 15:
+                        return 'Medium (5-15)'
+                    elif val < 50:
+                        return 'Large (15-50)'
+                    else:
+                        return 'Very Large (>50)'
+                        
+            except (ValueError, TypeError):
+                return 'UNKNOWN'
         
-        # Standardize slip sense
-        slip_mapping = {
-            'right': 'right', 'left': 'left', 'rl': 'right', 'lr': 'left',
-            'right - normal': 'right', 'left - normal': 'left', 'll': 'left',
-            'normal': 'normal', 'extensional': 'extensional', 'reverse': 'reverse',
-            'unknown': 'unknown', 'nan': 'unknown', '': 'unknown'
-        }
-        slip_sense = slip_sense.map(slip_mapping).fillna('unknown')
+        return series.apply(categorize_value)
+
+    def load_and_prepare_data(self, napa_file, ridgecrest_file):
+        """Load and prepare combined dataset"""
+        print("Loading earthquake field data from current schema files...")
         
-        # Clean Rupture_Expression
-        rupture_expr = df['Rupture_Expression'].fillna('unknown').astype(str).str.lower().str.strip()
+        # Load datasets
+        try:
+            napa_df = pd.read_csv(napa_file, encoding='utf-8')
+            ridgecrest_df = pd.read_csv(ridgecrest_file, encoding='utf-8')
+        except UnicodeDecodeError:
+            napa_df = pd.read_csv(napa_file, encoding='latin-1')
+            ridgecrest_df = pd.read_csv(ridgecrest_file, encoding='latin-1')
         
-        # Standardize rupture expression
-        rupture_mapping = {
-            'scarp': 'scarp', 'crack(s)': 'crack', 'cracks': 'crack', 'crack': 'crack',
-            'zone of deformation': 'zone_deformation', 'en_echelon': 'en_echelon',
-            'en echelon': 'en_echelon', 'mole track': 'mole_track',
-            'other': 'other', 'offset': 'offset',
-            'unknown': 'unknown', 'nan': 'unknown', '': 'unknown'
-        }
-        rupture_expr = rupture_expr.map(rupture_mapping).fillna('unknown')
+        print(f"Loaded Napa: {len(napa_df)} records")
+        print(f"Loaded Ridgecrest: {len(ridgecrest_df)} records")
         
-        return slip_sense, rupture_expr
-    
-    def fit(self, X_train, y_slip_train, y_rupture_train):
-        """Train the models"""
-        print("Training ML models...")
+        # Add dataset source identifier
+        napa_df['dataset_source'] = 'Napa_2014'
+        ridgecrest_df['dataset_source'] = 'Ridgecrest_2019'
+        
+        # Combine datasets
+        combined_df = pd.concat([napa_df, ridgecrest_df], ignore_index=True, sort=False)
+        print(f"Combined dataset: {len(combined_df)} records")
+        
+        # Filter records with substantial Notes content
+        combined_df = combined_df[
+            combined_df['Notes'].notna() & 
+            (combined_df['Notes'].str.len() > 20)
+        ].copy()
+        
+        print(f"Records with substantial Notes: {len(combined_df)}")
+        
+        # Prepare features (Notes field)
+        X = combined_df['Notes'].apply(self.preprocess_text)
+        
+        # Prepare targets
+        y = {}
+        for field in self.all_target_fields:
+            if field in combined_df.columns:
+                if field in ['Local_Fault_Azimuth_Degrees', 'Local_Fault_Dip', 'Heave_cm', 
+                            'Horizontal_Separation_cm', 'Vertical_Separation_cm', 'Net_Slip_Preferred_cm']:
+                    # Categorize numeric fields
+                    y[field] = self.categorize_numeric_field(combined_df[field], field)
+                else:
+                    # Keep categorical fields as-is, but clean them
+                    y[field] = combined_df[field].fillna('UNKNOWN').astype(str)
+                    y[field] = y[field].replace(['nan', 'None', ''], 'UNKNOWN')
+            else:
+                print(f"Warning: Field '{field}' not found in data")
+        
+        # Add dataset source as a target to analyze cross-dataset performance
+        y['dataset_source'] = combined_df['dataset_source']
+        
+        return X, y, combined_df
+
+    def train_models(self, X, y):
+        """Train ML models for each target field"""
+        print("\nTraining enhanced ML models...")
         
         # Vectorize text
-        X_vec = self.vectorizer.fit_transform(X_train)
+        print("Vectorizing text with enhanced TF-IDF...")
+        X_vectorized = self.vectorizer.fit_transform(X)
+        print(f"Text features shape: {X_vectorized.shape}")
         
-        # Train slip sense model
-        slip_mask = (y_slip_train != 'unknown').values  # Convert to numpy array
-        if slip_mask.sum() > 10:
-            X_slip = X_vec[slip_mask]  # Use numpy boolean indexing
-            y_slip_filtered = y_slip_train[y_slip_train != 'unknown']  # Filter Series directly
-            self.slip_model.fit(X_slip, y_slip_filtered)
-            print(f"Slip model trained on {len(y_slip_filtered)} samples")
-            print(f"Slip classes: {sorted(y_slip_filtered.unique())}")
+        trained_count = 0
+        for field in self.all_target_fields + ['dataset_source']:
+            if field not in y:
+                continue
+                
+            print(f"\nTraining model for '{field}'...")
+            
+            # Encode labels
+            self.label_encoders[field] = LabelEncoder()
+            y_encoded = self.label_encoders[field].fit_transform(y[field])
+            
+            # Skip if insufficient classes
+            unique_classes = len(np.unique(y_encoded))
+            if unique_classes < 2:
+                print(f"Skipping '{field}' - only {unique_classes} class")
+                continue
+            
+            # Use different models based on field type and class count
+            if unique_classes <= 5:
+                # Use Gradient Boosting for fields with few classes
+                base_classifier = GradientBoostingClassifier(
+                    n_estimators=100, 
+                    learning_rate=0.1,
+                    max_depth=6,
+                    random_state=42
+                )
+            else:
+                # Use Random Forest for fields with many classes
+                base_classifier = RandomForestClassifier(
+                    n_estimators=150,
+                    max_depth=10,
+                    min_samples_split=5,
+                    min_samples_leaf=2,
+                    random_state=42,
+                    n_jobs=-1
+                )
+            
+            # Wrap in OneVsRest for multi-class
+            model = OneVsRestClassifier(base_classifier, n_jobs=-1)
+            
+            # Train model
+            model.fit(X_vectorized, y_encoded)
+            self.models[field] = model
+            
+            # Store feature importance if available
+            if hasattr(base_classifier, 'feature_importances_'):
+                self.feature_importances[field] = base_classifier.feature_importances_
+            
+            trained_count += 1
+            print(f"Trained - Classes: {unique_classes}")
         
-        # Train rupture expression model
-        rupture_mask = (y_rupture_train != 'unknown').values  # Convert to numpy array
-        if rupture_mask.sum() > 10:
-            X_rupture = X_vec[rupture_mask]  # Use numpy boolean indexing
-            y_rupture_filtered = y_rupture_train[y_rupture_train != 'unknown']  # Filter Series directly
-            self.rupture_model.fit(X_rupture, y_rupture_filtered)
-            print(f"Rupture model trained on {len(y_rupture_filtered)} samples")
-            print(f"Rupture classes: {sorted(y_rupture_filtered.unique())}")
-        
-        self.is_fitted = True
-    
-    def predict(self, X_test):
-        """Make predictions"""
-        X_vec = self.vectorizer.transform(X_test)
-        
-        try:
-            slip_pred = self.slip_model.predict(X_vec)
-        except:
-            slip_pred = ['unknown'] * len(X_test)
-        
-        try:
-            rupture_pred = self.rupture_model.predict(X_vec)
-        except:
-            rupture_pred = ['unknown'] * len(X_test)
-        
-        return slip_pred, rupture_pred
+        print(f"\nSuccessfully trained {trained_count} models!")
 
-def create_visualizations(results, y_slip_test, y_rupture_test, slip_pred, rupture_pred):
-    """Create comprehensive visualizations for model performance"""
-    
-    # Create a figure with multiple subplots
-    fig = plt.figure(figsize=(16, 12))
-    
-    # 1. Accuracy Comparison Bar Chart
-    ax1 = plt.subplot(2, 3, 1)
-    fields = ['Slip_Sense', 'Rupture_Expression']
-    accuracies = [results['slip_accuracy'], results['rupture_accuracy']]
-    colors = ['#3498db', '#e74c3c']
-    
-    bars = ax1.bar(fields, accuracies, color=colors, alpha=0.8)
-    ax1.set_ylabel('Accuracy', fontsize=12)
-    ax1.set_title('Model Accuracy by Field', fontsize=14, fontweight='bold')
-    ax1.set_ylim(0, 1)
-    ax1.grid(axis='y', alpha=0.3)
-    
-    # Add accuracy labels on bars
-    for bar, acc in zip(bars, accuracies):
-        height = bar.get_height()
-        ax1.text(bar.get_x() + bar.get_width()/2, height + 0.01,
-                f'{acc:.1%}\n({int(acc*results["test_samples"])} correct)',
-                ha='center', va='bottom', fontweight='bold')
-    
-    # 2. Slip Sense Confusion Matrix
-    ax2 = plt.subplot(2, 3, 2)
-    if len(results['slip_cm']) > 0 and len(results['slip_labels']) > 1:
-        im = ax2.imshow(results['slip_cm'], cmap='Blues', aspect='auto')
-        ax2.set_xticks(range(len(results['slip_labels'])))
-        ax2.set_yticks(range(len(results['slip_labels'])))
-        ax2.set_xticklabels(results['slip_labels'], rotation=45)
-        ax2.set_yticklabels(results['slip_labels'])
+    def evaluate_models(self, X, y):
+        """Comprehensive model evaluation"""
+        print("\n" + "="*70)
+        print("ENHANCED MODEL EVALUATION - CURRENT SCHEMA")
+        print("="*70)
         
-        # Add text annotations
-        for i in range(len(results['slip_labels'])):
-            for j in range(len(results['slip_labels'])):
-                text = ax2.text(j, i, results['slip_cm'][i, j],
-                               ha="center", va="center", color="white" if results['slip_cm'][i, j] > results['slip_cm'].max()/2 else "black")
+        X_vectorized = self.vectorizer.transform(X)
         
-        ax2.set_title('Slip_Sense Confusion Matrix', fontweight='bold')
-        ax2.set_xlabel('Predicted')
-        ax2.set_ylabel('Actual')
-    else:
-        ax2.text(0.5, 0.5, 'Insufficient data\nfor confusion matrix', 
-                ha='center', va='center', transform=ax2.transAxes, fontsize=12)
-        ax2.set_title('Slip_Sense Confusion Matrix', fontweight='bold')
-    
-    # 3. Rupture Expression Confusion Matrix
-    ax3 = plt.subplot(2, 3, 3)
-    if len(results['rupture_cm']) > 0 and len(results['rupture_labels']) > 1:
-        im = ax3.imshow(results['rupture_cm'], cmap='Greens', aspect='auto')
-        ax3.set_xticks(range(len(results['rupture_labels'])))
-        ax3.set_yticks(range(len(results['rupture_labels'])))
-        ax3.set_xticklabels(results['rupture_labels'], rotation=45)
-        ax3.set_yticklabels(results['rupture_labels'])
+        # Split data for evaluation
+        X_train, X_test, indices_train, indices_test = train_test_split(
+            X_vectorized, range(len(X)), test_size=0.25, random_state=42, stratify=y['dataset_source']
+        )
         
-        # Add text annotations
-        for i in range(len(results['rupture_labels'])):
-            for j in range(len(results['rupture_labels'])):
-                text = ax3.text(j, i, results['rupture_cm'][i, j],
-                               ha="center", va="center", color="white" if results['rupture_cm'][i, j] > results['rupture_cm'].max()/2 else "black")
+        results = {}
+        category_results = {}
         
-        ax3.set_title('Rupture_Expression Confusion Matrix', fontweight='bold')
-        ax3.set_xlabel('Predicted')
-        ax3.set_ylabel('Actual')
-    else:
-        ax3.text(0.5, 0.5, 'Insufficient data\nfor confusion matrix', 
-                ha='center', va='center', transform=ax3.transAxes, fontsize=12)
-        ax3.set_title('Rupture_Expression Confusion Matrix', fontweight='bold')
-    
-    # 4. Label Distribution for Slip Sense
-    ax4 = plt.subplot(2, 3, 4)
-    slip_test_mask_viz = y_slip_test != 'unknown'
-    if slip_test_mask_viz.sum() > 0:
-        slip_counts = pd.Series(y_slip_test[slip_test_mask_viz]).value_counts()
-        wedges, texts, autotexts = ax4.pie(slip_counts.values, labels=slip_counts.index, 
-                                          autopct='%1.1f%%', startangle=90, colors=plt.cm.Set3.colors)
-        ax4.set_title('Slip_Sense Label Distribution', fontweight='bold')
-    else:
-        ax4.text(0.5, 0.5, 'No test data\navailable', ha='center', va='center', transform=ax4.transAxes)
-        ax4.set_title('Slip_Sense Label Distribution', fontweight='bold')
-    
-    # 5. Label Distribution for Rupture Expression
-    ax5 = plt.subplot(2, 3, 5)
-    rupture_test_mask_viz = y_rupture_test != 'unknown'
-    if rupture_test_mask_viz.sum() > 0:
-        rupture_counts = pd.Series(y_rupture_test[rupture_test_mask_viz]).value_counts()
-        wedges, texts, autotexts = ax5.pie(rupture_counts.values, labels=rupture_counts.index, 
-                                          autopct='%1.1f%%', startangle=90, colors=plt.cm.Set2.colors)
-        ax5.set_title('Rupture_Expression Label Distribution', fontweight='bold')
-    else:
-        ax5.text(0.5, 0.5, 'No test data\navailable', ha='center', va='center', transform=ax5.transAxes)
-        ax5.set_title('Rupture_Expression Label Distribution', fontweight='bold')
-    
-    # 6. Model Performance Summary
-    ax6 = plt.subplot(2, 3, 6)
-    ax6.axis('off')
-    
-    # Create performance summary text
-    summary_text = f"""
-MODEL PERFORMANCE SUMMARY
+        # Evaluate each field
+        for field in self.models.keys():
+            if field not in y:
+                continue
+                
+            y_field = y[field]
+            y_encoded = self.label_encoders[field].transform(y_field)
+            
+            y_train = y_encoded[indices_train]
+            y_test = y_encoded[indices_test]
+            
+            # Train and predict
+            model = self.models[field]
+            model.fit(X_train, y_train)
+            y_pred = model.predict(X_test)
+            
+            # Calculate metrics
+            accuracy = accuracy_score(y_test, y_pred)
+            results[field] = accuracy
+            
+            # Cross-validation score
+            try:
+                cv_scores = cross_val_score(model, X_train, y_train, cv=3, scoring='accuracy')
+                cv_mean = cv_scores.mean()
+            except:
+                cv_mean = accuracy
+            
+            print(f"\n--- {field.upper()} ---")
+            print(f"Accuracy: {accuracy:.3f} | CV Score: {cv_mean:.3f}")
+            
+            # Show detailed report for important fields
+            unique_labels = np.unique(y_test)
+            if len(unique_labels) <= 15 and field in ['Feature_Origin', 'Slip_Sense', 'Scarp_Facing_Direction']:
+                target_names = [self.label_encoders[field].classes_[i] for i in unique_labels]
+                report = classification_report(y_test, y_pred, labels=unique_labels, 
+                                             target_names=target_names, zero_division=0)
+                print("Classification Report:")
+                print(report)
+        
+        # Organize results by category
+        for category, fields in self.target_fields.items():
+            category_accuracies = [results[field] for field in fields if field in results]
+            if category_accuracies:
+                category_results[category] = np.mean(category_accuracies)
+        
+        # Print summary
+        print("\n" + "="*70)
+        print("PERFORMANCE SUMMARY BY CATEGORY")
+        print("="*70)
+        
+        for category, avg_accuracy in category_results.items():
+            print(f"{category.upper()}: {avg_accuracy:.3f}")
+            for field in self.target_fields[category]:
+                if field in results:
+                    print(f"  • {field}: {results[field]:.3f}")
+        
+        # Overall statistics
+        all_accuracies = list(results.values())
+        if all_accuracies:
+            overall_avg = np.mean(all_accuracies)
+            print(f"\n🎯 OVERALL AVERAGE ACCURACY: {overall_avg:.3f}")
+            print(f"📊 Best Field: {max(results.items(), key=lambda x: x[1])}")
+            print(f"📉 Worst Field: {min(results.items(), key=lambda x: x[1])}")
+            
+            high_performance = [field for field, acc in results.items() if acc >= 0.8]
+            print(f"🔥 High Performance Fields (≥0.8): {len(high_performance)}/{len(results)}")
+        
+        # Dataset source analysis
+        if 'dataset_source' in results:
+            dataset_acc = results['dataset_source']
+            print(f"\n🔍 Dataset Distinguishability: {dataset_acc:.3f}")
+            if dataset_acc > 0.85:
+                print("   → Strong linguistic differences between Napa and Ridgecrest datasets")
+            elif dataset_acc > 0.7:
+                print("   → Moderate linguistic differences between datasets")
+            else:
+                print("   → Similar linguistic patterns across datasets")
+        
+        return results
 
-📊 Dataset Statistics:
-• Total Records: {results['test_samples']}
-• Slip Sense Test Samples: {(y_slip_test != 'unknown').sum()}
-• Rupture Expression Test Samples: {(y_rupture_test != 'unknown').sum()}
+    def predict_from_notes(self, notes_text):
+        """Make predictions for new notes text"""
+        if not self.models:
+            print("No trained models available!")
+            return {}
+        
+        # Preprocess and vectorize
+        clean_notes = self.preprocess_text(notes_text)
+        notes_vectorized = self.vectorizer.transform([clean_notes])
+        
+        predictions = {}
+        
+        for field, model in self.models.items():
+            if field == 'dataset_source':  # Skip dataset source in predictions
+                continue
+                
+            # Make prediction
+            pred_encoded = model.predict(notes_vectorized)[0]
+            pred_class = self.label_encoders[field].inverse_transform([pred_encoded])[0]
+            
+            # Get confidence
+            try:
+                pred_proba = model.predict_proba(notes_vectorized)[0]
+                confidence = np.max(pred_proba)
+            except:
+                confidence = 0.5  # Default if probability not available
+            
+            predictions[field] = {
+                'prediction': pred_class,
+                'confidence': confidence
+            }
+        
+        return predictions
 
-🎯 Accuracy Results:
-• Slip_Sense: {results['slip_accuracy']:.1%}
-• Rupture_Expression: {results['rupture_accuracy']:.1%}
-• Average Accuracy: {(results['slip_accuracy'] + results['rupture_accuracy'])/2:.1%}
-
-🔬 Model Type:
-• TF-IDF Vectorization
-• Random Forest Classifier
-• Simple Text Processing
-
-✅ Proof of Concept: SUCCESS!
-ML can extract structured data from 
-earthquake field observation notes.
-    """
-    
-    ax6.text(0.05, 0.95, summary_text, transform=ax6.transAxes, fontsize=10,
-            verticalalignment='top', bbox=dict(boxstyle="round,pad=0.5", facecolor="lightblue", alpha=0.8))
-    
-    plt.tight_layout()
-    plt.suptitle('Earthquake Field Data ML Model - Performance Analysis', fontsize=16, fontweight='bold', y=0.98)
-    
-    return fig
-
-def plot_prediction_examples():
-    """Create a separate plot showing prediction examples"""
-    fig, ax = plt.subplots(figsize=(12, 8))
-    
-    # Sample predictions data
-    examples = [
-        ("Large crack trending northeast\nwith left-lateral offset", "left", "crack", "✓", "✓"),
-        ("Scarp formation with\nright-lateral displacement", "right", "scarp", "✓", "✓"),
-        ("Extensional cracks in pavement\nwith vertical separation", "extensional", "crack", "✓", "✓"),
-        ("Mole track features with\nnormal fault movement", "normal", "mole_track", "✓", "✓"),
-        ("Zone of deformation with\ndistributed cracking", "unknown", "zone_deformation", "?", "✓")
-    ]
-    
-    # Create table-like visualization
-    y_positions = range(len(examples))
-    
-    ax.barh(y_positions, [1]*len(examples), color=['#2ecc71' if ex[3]=='✓' and ex[4]=='✓' 
-                                                  else '#f39c12' if ex[3]=='?' or ex[4]=='?' 
-                                                  else '#e74c3c' for ex in examples], alpha=0.3)
-    
-    # Add text annotations
-    for i, (text, slip, rupture, slip_check, rupture_check) in enumerate(examples):
-        ax.text(0.02, i, text, va='center', fontsize=10, fontweight='bold')
-        ax.text(0.5, i, f"Slip: {slip} {slip_check}", va='center', fontsize=10)
-        ax.text(0.75, i, f"Rupture: {rupture} {rupture_check}", va='center', fontsize=10)
-    
-    ax.set_yticks(y_positions)
-    ax.set_yticklabels([f"Example {i+1}" for i in range(len(examples))])
-    ax.set_xlim(0, 1)
-    ax.set_xlabel('Prediction Accuracy')
-    ax.set_title('Sample Predictions on New Text Descriptions', fontsize=14, fontweight='bold')
-    ax.grid(axis='x', alpha=0.3)
-    
-    # Add legend
-    from matplotlib.patches import Patch
-    legend_elements = [Patch(facecolor='#2ecc71', alpha=0.3, label='Both Correct'),
-                      Patch(facecolor='#f39c12', alpha=0.3, label='Partial/Unknown'),
-                      Patch(facecolor='#e74c3c', alpha=0.3, label='Incorrect')]
-    ax.legend(handles=legend_elements, loc='upper right')
-    
-    plt.tight_layout()
-    return fig
+    def demonstrate_predictions(self, X, y, n_examples=3):
+        """Show prediction examples"""
+        print("\n" + "="*70)
+        print("PREDICTION EXAMPLES")
+        print("="*70)
+        
+        # Select diverse examples
+        sample_indices = np.random.choice(len(X), min(n_examples, len(X)), replace=False)
+        
+        for i, idx in enumerate(sample_indices):
+            notes_text = X.iloc[idx]
+            
+            print(f"\n--- EXAMPLE {i+1} ---")
+            print(f"Notes: \"{notes_text[:200]}{'...' if len(notes_text) > 200 else ''}\"")
+            
+            predictions = self.predict_from_notes(notes_text)
+            
+            print("\nKey Predictions:")
+            important_fields = ['Feature_Origin', 'Slip_Sense', 'Scarp_Facing_Direction', 'Creator']
+            
+            for field in important_fields:
+                if field in predictions and field in y:
+                    actual = y[field].iloc[idx]
+                    pred_info = predictions[field]
+                    predicted = pred_info['prediction']
+                    confidence = pred_info['confidence']
+                    
+                    match = "✓" if predicted == actual else "✗"
+                    print(f"  {field}: {predicted} (conf: {confidence:.2f}) {match} Actual: {actual}")
 
 def main():
     """Main execution function"""
-    print("Loading earthquake observation data...")
+    print("Enhanced Earthquake Field Data ML Model")
+    print("=" * 70)
+    print("Predicting geological and metadata fields from Notes field")
+    print("Using combined Napa (2014) and Ridgecrest (2019) current schema data\n")
     
-    # Load the data
-    napa_df = pd.read_csv('napa_current_schema_20250716.csv')
-    ridgecrest_df = pd.read_csv('ridgecrest_current_schema_20250716.csv')
+    # Initialize enhanced model
+    model = EnhancedEarthquakeFieldDataML()
     
-    print(f"Loaded Napa: {len(napa_df)} records")
-    print(f"Loaded Ridgecrest: {len(ridgecrest_df)} records")
-    
-    # Combine datasets
-    combined_df = pd.concat([napa_df, ridgecrest_df], ignore_index=True)
-    
-    # Filter records with substantial notes
-    valid_df = combined_df[combined_df['Notes'].str.len() > 30].copy()
-    print(f"Records with substantial notes: {len(valid_df)}")
-    
-    # Initialize predictor
-    predictor = SimpleEarthquakePredictor()
-    
-    # Clean text and prepare labels
-    valid_df['clean_notes'] = valid_df['Notes'].apply(predictor.clean_text)
-    slip_sense, rupture_expr = predictor.prepare_labels(valid_df)
-    
-    # Filter records that have at least one known label
-    has_slip = slip_sense != 'unknown'
-    has_rupture = rupture_expr != 'unknown'
-    usable_mask = has_slip | has_rupture
-    
-    if usable_mask.sum() < 50:
-        print("Warning: Very few labeled samples found!")
-        return
-    
-    # Use only records with labels
-    X = valid_df.loc[usable_mask, 'clean_notes']
-    y_slip = slip_sense[usable_mask]
-    y_rupture = rupture_expr[usable_mask]
-    
-    print(f"Usable records for ML: {len(X)}")
-    print(f"Records with slip labels: {(y_slip != 'unknown').sum()}")
-    print(f"Records with rupture labels: {(y_rupture != 'unknown').sum()}")
-    
-    # Split data
-    X_train, X_test, y_slip_train, y_slip_test, y_rupture_train, y_rupture_test = train_test_split(
-        X, y_slip, y_rupture, test_size=0.3, random_state=42
+    # Load and prepare data
+    X, y, df = model.load_and_prepare_data(
+        'napa_current_schema_20250716.csv',
+        'ridgecrest_current_schema_20250716.csv'
     )
     
-    print(f"Training samples: {len(X_train)}")
-    print(f"Test samples: {len(X_test)}")
+    # Train models
+    model.train_models(X, y)
     
-    # Train model
-    predictor.fit(X_train, y_slip_train, y_rupture_train)
+    # Evaluate models
+    results = model.evaluate_models(X, y)
     
-    # Make predictions
-    slip_pred, rupture_pred = predictor.predict(X_test)
+    # Show prediction examples
+    model.demonstrate_predictions(X, y, n_examples=3)
     
-    # Evaluate Slip_Sense
-    slip_test_mask = (y_slip_test != 'unknown').values  # Convert to numpy array
-    if slip_test_mask.sum() > 0:
-        y_slip_true_filtered = y_slip_test[y_slip_test != 'unknown']
-        slip_pred_filtered = [slip_pred[i] for i in range(len(slip_pred)) if slip_test_mask[i]]
-        
-        slip_accuracy = accuracy_score(y_slip_true_filtered, slip_pred_filtered)
-        slip_cm = confusion_matrix(y_slip_true_filtered, slip_pred_filtered)
-        slip_labels = sorted(y_slip_true_filtered.unique())
-    else:
-        slip_accuracy = 0
-        slip_cm = []
-        slip_labels = []
-    
-    # Evaluate Rupture_Expression
-    rupture_test_mask = (y_rupture_test != 'unknown').values  # Convert to numpy array
-    if rupture_test_mask.sum() > 0:
-        y_rupture_true_filtered = y_rupture_test[y_rupture_test != 'unknown']
-        rupture_pred_filtered = [rupture_pred[i] for i in range(len(rupture_pred)) if rupture_test_mask[i]]
-        
-        rupture_accuracy = accuracy_score(y_rupture_true_filtered, rupture_pred_filtered)
-        rupture_cm = confusion_matrix(y_rupture_true_filtered, rupture_pred_filtered)
-        rupture_labels = sorted(y_rupture_true_filtered.unique())
-    else:
-        rupture_accuracy = 0
-        rupture_cm = []
-        rupture_labels = []
-    
-    # Print results
-    print(f"\n=== RESULTS ===")
-    print(f"Slip_Sense Accuracy: {slip_accuracy:.3f} ({slip_test_mask.sum()} test samples)")
-    print(f"Rupture_Expression Accuracy: {rupture_accuracy:.3f} ({rupture_test_mask.sum()} test samples)")
-    
-    # Detailed classification reports
-    if slip_test_mask.sum() > 0:
-        y_slip_true_filtered = y_slip_test[y_slip_test != 'unknown']
-        slip_pred_filtered = [slip_pred[i] for i in range(len(slip_pred)) if slip_test_mask[i]]
-        print(f"\nSlip_Sense Classification Report:")
-        print(classification_report(y_slip_true_filtered, slip_pred_filtered))
-    
-    if rupture_test_mask.sum() > 0:
-        y_rupture_true_filtered = y_rupture_test[y_rupture_test != 'unknown']
-        rupture_pred_filtered = [rupture_pred[i] for i in range(len(rupture_pred)) if rupture_test_mask[i]]
-        print(f"\nRupture_Expression Classification Report:")
-        print(classification_report(y_rupture_true_filtered, rupture_pred_filtered))
-    
-    # Test on sample descriptions
-    print(f"\n=== SAMPLE PREDICTIONS ===")
-    test_descriptions = [
-        "large crack trending northeast with left lateral offset",
-        "scarp formation with right lateral displacement",
-        "extensional cracks in asphalt with vertical separation",
-        "mole track features with normal fault movement",
-        "zone of deformation with distributed cracking"
-    ]
-    
-    for desc in test_descriptions:
-        slip_p, rupture_p = predictor.predict([desc])
-        print(f"'{desc}' -> Slip: {slip_p[0]}, Rupture: {rupture_p[0]}")
-    
-    # Create visualizations
-    results = {
-        'slip_accuracy': slip_accuracy,
-        'rupture_accuracy': rupture_accuracy,
-        'slip_cm': slip_cm,
-        'rupture_cm': rupture_cm,
-        'slip_labels': slip_labels,
-        'rupture_labels': rupture_labels,
-        'test_samples': len(X_test),
-        'example_slip': slip_pred[0] if len(slip_pred) > 0 else 'N/A',
-        'example_rupture': rupture_pred[0] if len(rupture_pred) > 0 else 'N/A'
-    }
-    
-    # Create main performance visualization
-    print("\n=== CREATING VISUALIZATIONS ===")
-    fig1 = create_visualizations(results, y_slip_test, y_rupture_test, slip_pred, rupture_pred)
-    plt.show()
-    
-    # Create prediction examples visualization
-    fig2 = plot_prediction_examples()
-    plt.show()
-    
-    # Create additional analysis plots
-    fig3, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(15, 10))
-    
-    # 1. Text length vs accuracy
-    test_texts_clean = [predictor.clean_text(text) for text in X_test]
-    text_lengths = [len(text.split()) for text in test_texts_clean]
-    
-    # Create bins for text length
-    length_bins = [0, 10, 20, 50, 100, 500]
-    accuracy_by_length = []
-    
-    for i in range(len(length_bins)-1):
-        min_len, max_len = length_bins[i], length_bins[i+1]
-        mask = [(min_len <= length < max_len) for length in text_lengths]
-        
-        if sum(mask) > 0:
-            # Calculate accuracy for this length range
-            slip_subset = [slip_pred[j] for j, m in enumerate(mask) if m and y_slip_test.iloc[j] != 'unknown']
-            slip_true_subset = [y_slip_test.iloc[j] for j, m in enumerate(mask) if m and y_slip_test.iloc[j] != 'unknown']
-            
-            if len(slip_subset) > 0:
-                acc = sum(1 for t, p in zip(slip_true_subset, slip_subset) if t == p) / len(slip_subset)
-                accuracy_by_length.append(acc)
-            else:
-                accuracy_by_length.append(0)
-        else:
-            accuracy_by_length.append(0)
-    
-    ax1.bar(range(len(accuracy_by_length)), accuracy_by_length, color='#3498db', alpha=0.7)
-    ax1.set_xlabel('Text Length (words)')
-    ax1.set_ylabel('Accuracy')
-    ax1.set_title('Accuracy vs Text Length')
-    ax1.set_xticks(range(len(length_bins)-1))
-    ax1.set_xticklabels([f'{length_bins[i]}-{length_bins[i+1]}' for i in range(len(length_bins)-1)])
-    
-    # 2. Feature importance (top TF-IDF terms)
-    if hasattr(predictor.vectorizer, 'vocabulary_'):
-        feature_names = predictor.vectorizer.get_feature_names_out()
-        if hasattr(predictor.slip_model, 'feature_importances_'):
-            importances = predictor.slip_model.feature_importances_
-            top_indices = np.argsort(importances)[-10:]
-            top_features = [feature_names[i] for i in top_indices]
-            top_importances = importances[top_indices]
-            
-            ax2.barh(range(len(top_features)), top_importances, color='#e74c3c', alpha=0.7)
-            ax2.set_yticks(range(len(top_features)))
-            ax2.set_yticklabels(top_features)
-            ax2.set_xlabel('Feature Importance')
-            ax2.set_title('Top 10 Most Important Features (Slip_Sense)')
-    
-    # 3. Dataset composition
-    dataset_counts = {'Napa': len(napaData.data), 'Ridgecrest': len(ridgecrestData.data)}
-    ax3.pie(dataset_counts.values(), labels=dataset_counts.keys(), autopct='%1.1f%%', 
-           colors=['#f39c12', '#9b59b6'], startangle=90)
-    ax3.set_title('Dataset Composition')
-    
-    # 4. Prediction confidence analysis
-    sample_predictions = ['left', 'right', 'normal', 'extensional', 'unknown']
-    prediction_counts = {pred: list(slip_pred).count(pred) for pred in sample_predictions}
-    
-    ax4.bar(prediction_counts.keys(), prediction_counts.values(), color='#2ecc71', alpha=0.7)
-    ax4.set_xlabel('Predicted Classes')
-    ax4.set_ylabel('Frequency')
-    ax4.set_title('Distribution of Slip_Sense Predictions')
-    ax4.tick_params(axis='x', rotation=45)
-    
-    plt.tight_layout()
-    plt.suptitle('Additional Analysis - Text Features and Predictions', fontsize=16, fontweight='bold', y=0.98)
-    plt.show()
-    
-    print(f"\n=== SUMMARY ===")
-    print(f"This basic ML model achieved:")
-    print(f"* {slip_accuracy:.1%} accuracy for Slip_Sense prediction")
-    print(f"* {rupture_accuracy:.1%} accuracy for Rupture_Expression prediction")
-    print(f"* Trained on {len(X_train)} samples, tested on {len(X_test)} samples")
-    print(f"* Used simple TF-IDF + Random Forest approach")
-    print(f"\nThis proves that ML can extract structured data from earthquake field notes!")
+    print(f"\n🎉 Training completed successfully!")
+    print(f"📈 Trained on {len(X)} field observations")
+    print(f"🔬 Ready to predict geological features from Notes field")
 
 if __name__ == "__main__":
     main()
