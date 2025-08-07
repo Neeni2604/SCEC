@@ -489,35 +489,35 @@ class ConsolidatedEarthquakeML:
         
         return predictions
 
-    def demonstrate_predictions(self, X, y, n_samples=5):
-        """Demonstrate predictions on sample data"""
-        print(f"\n{'='*60}")
-        print("PREDICTION EXAMPLES")
-        print(f"{'='*60}")
+    # def demonstrate_predictions(self, X, y, n_samples=5):
+    #     """Demonstrate predictions on sample data"""
+    #     print(f"\n{'='*60}")
+    #     print("PREDICTION EXAMPLES")
+    #     print(f"{'='*60}")
         
-        # Sample some descriptions
-        sample_indices = np.random.choice(len(X), min(n_samples, len(X)), replace=False)
+    #     # Sample some descriptions
+    #     sample_indices = np.random.choice(len(X), min(n_samples, len(X)), replace=False)
         
-        for i, idx in enumerate(sample_indices):
-            description = X.iloc[idx]
+    #     for i, idx in enumerate(sample_indices):
+    #         description = X.iloc[idx]
             
-            print(f"\n--- EXAMPLE {i+1} ---")
-            print(f"Description: \"{description[:150]}{'...' if len(description) > 150 else ''}\"")
+    #         print(f"\n--- EXAMPLE {i+1} ---")
+    #         print(f"Description: \"{description[:150]}{'...' if len(description) > 150 else ''}\"")
             
-            # Make prediction
-            predictions = self.predict_from_description(description)
+    #         # Make prediction
+    #         predictions = self.predict_from_description(description)
             
-            print(f"\nPredictions:")
-            for field, pred_info in predictions.items():
-                if 'error' in pred_info:
-                    continue
+    #         print(f"\nPredictions:")
+    #         for field, pred_info in predictions.items():
+    #             if 'error' in pred_info:
+    #                 continue
                     
-                actual = y[field].iloc[idx] if field in y else 'N/A'
-                predicted = pred_info['prediction']
-                confidence = pred_info['confidence']
+    #             actual = y[field].iloc[idx] if field in y else 'N/A'
+    #             predicted = pred_info['prediction']
+    #             confidence = pred_info['confidence']
                 
-                match = "✓" if predicted == actual else "✗"
-                print(f"  {field.replace('_', ' ').title():<25}: {predicted:<15} (conf: {confidence:.2f}) {match} Actual: {actual}")
+    #             match = "✓" if predicted == actual else "✗"
+    #             print(f"  {field.replace('_', ' ').title():<25}: {predicted:<15} (conf: {confidence:.2f}) {match} Actual: {actual}")
 
 def main():
     print("Consolidated Earthquake Field Data ML Model")
