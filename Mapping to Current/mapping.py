@@ -104,7 +104,7 @@ class EarthquakeDataMapper:
             'longitude' : '_longitude',
             'orig_lat' : '_orig_lat',
             'orig_lon' : '_orig_lon',
-            'note' : 'Vector_Offset_Feature_Notes',
+            'note' : '_Compiler_Note',
         }
         
         # Define current schema structure (base fields)
@@ -118,8 +118,7 @@ class EarthquakeDataMapper:
             'Net_Slip_Max_cm', 'Vector_Offset_Feature_Notes',
             'Horizontal_Separation_cm', 'Horizontal_Separation_Min_cm', 'Horizontal_Separation_Max_cm',
             'Vertical_Separation_cm', 'Vertical_Separation_Min_cm', 'Vertical_Separation_Max_cm',
-            'Slip_Offset_Feature_Notes',
-            'GlobalID',
+            'Slip_Offset_Feature_Notes','GlobalID',
             'CreationDate', 'Creator', 'EditDate', 'Editor'
         ]
 
@@ -199,9 +198,9 @@ class EarthquakeDataMapper:
                     mapped_row[current_field] = row[napa_field]
             
             # Set default values for system fields
-            mapped_row['CreationDate'] = datetime.now()
-            mapped_row['EditDate'] = datetime.now()
-            mapped_row['Editor'] = 'Napa_Migration'
+            # mapped_row['CreationDate'] = datetime.now()
+            # mapped_row['EditDate'] = datetime.now()
+            # mapped_row['Editor'] = 'Napa_Migration'
             
             # Add dataset source identifier to Notes
             existing_notes = mapped_row.get('Notes', '')
@@ -236,9 +235,9 @@ class EarthquakeDataMapper:
                     mapped_row[current_field] = row[ridgecrest_field]
             
             # Set default values for system fields
-            mapped_row['CreationDate'] = datetime.now()
-            mapped_row['EditDate'] = datetime.now() 
-            mapped_row['Editor'] = 'Ridgecrest_Migration'
+            # mapped_row['CreationDate'] = datetime.now()
+            # mapped_row['EditDate'] = datetime.now() 
+            # mapped_row['Editor'] = 'Ridgecrest_Migration'
             
             # Add dataset source identifier to Notes
             existing_notes = mapped_row.get('Notes', '')
