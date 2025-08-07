@@ -456,8 +456,8 @@ def main():
     
     # Load and prepare data
     X, y, df = model.load_and_prepare_data(
-        'napa_current_schema_20250716.csv',
-        'ridgecrest_current_schema_20250716.csv'
+        'napa_current_schema_20250807.csv',
+        'ridgecrest_current_schema_20250807.csv'
     )
     
     # Train models
