@@ -15,6 +15,9 @@ from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import classification_report, accuracy_score, confusion_matrix
 from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+import seaborn as sns
 import warnings
 import re
 from datetime import datetime
@@ -488,36 +491,383 @@ class ConsolidatedEarthquakeML:
                 }
         
         return predictions
+    
+    def add_plotting_to_main_class():
+        """
+        Code to add to your main() function in the ConsolidatedEarthquakeML script
+        """
+        plotting_code = '''
+        # Add this to the end of your main() function:
+        
+        # Create visualizer
+        visualizer = EarthquakeMLVisualizer()
+        
+        # Plot 1: Model accuracies
+        visualizer.plot_model_accuracies(results, 'earthquake_ml_accuracies.png')
+        
+        # Plot 2: Prediction scatter for best performing field
+        best_field = max(results.keys(), key=lambda k: results[k])
+        print(f"Creating detailed analysis for best performing field: {best_field}")
+        visualizer.plot_prediction_scatter(ml_model, X, y, best_field, 
+                                        f'prediction_analysis_{best_field}.png')
+        
+        # Plot 3: Comprehensive summary
+        visualizer.plot_model_summary(ml_model, X, y, results, 'earthquake_ml_summary.png')
+        
+        print("\\nAll visualizations have been generated and saved!")
+        '''
+        return plotting_code
+    
 
-    # def demonstrate_predictions(self, X, y, n_samples=5):
-    #     """Demonstrate predictions on sample data"""
-    #     print(f"\n{'='*60}")
-    #     print("PREDICTION EXAMPLES")
-    #     print(f"{'='*60}")
+class EarthquakeMLVisualizer:
+    def __init__(self):
+        # Set up colorblind-friendly palette
+        # Using Cividis and Set2 palettes which are colorblind accessible
+        self.colors = {
+            'primary': '#1f77b4',      # Blue
+            'secondary': '#ff7f0e',    # Orange  
+            'success': '#2ca02c',      # Green
+            'warning': '#d62728',      # Red
+            'info': '#9467bd',         # Purple
+            'accent': '#8c564b',       # Brown
+            'light': '#e377c2',        # Pink
+            'dark': '#7f7f7f'          # Gray
+        }
         
-    #     # Sample some descriptions
-    #     sample_indices = np.random.choice(len(X), min(n_samples, len(X)), replace=False)
+        # Colorblind-friendly palette for multiple categories
+        self.palette = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', 
+                       '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
         
-    #     for i, idx in enumerate(sample_indices):
-    #         description = X.iloc[idx]
-            
-    #         print(f"\n--- EXAMPLE {i+1} ---")
-    #         print(f"Description: \"{description[:150]}{'...' if len(description) > 150 else ''}\"")
-            
-    #         # Make prediction
-    #         predictions = self.predict_from_description(description)
-            
-    #         print(f"\nPredictions:")
-    #         for field, pred_info in predictions.items():
-    #             if 'error' in pred_info:
-    #                 continue
-                    
-    #             actual = y[field].iloc[idx] if field in y else 'N/A'
-    #             predicted = pred_info['prediction']
-    #             confidence = pred_info['confidence']
-                
-    #             match = "✓" if predicted == actual else "✗"
-    #             print(f"  {field.replace('_', ' ').title():<25}: {predicted:<15} (conf: {confidence:.2f}) {match} Actual: {actual}")
+        # Set style
+        plt.style.use('seaborn-v0_8-whitegrid')
+        sns.set_palette(self.palette)
+    
+    def plot_model_accuracies(self, results, save_path='model_accuracies.png'):
+        """
+        Create a horizontal bar chart showing accuracy for each field
+        """
+        # Prepare data
+        fields = list(results.keys())
+        accuracies = list(results.values())
+        
+        # Clean field names for display
+        display_names = [field.replace('_', ' ').title() for field in fields]
+        
+        # Sort by accuracy (descending)
+        sorted_data = sorted(zip(display_names, accuracies), key=lambda x: x[1], reverse=True)
+        sorted_names, sorted_accuracies = zip(*sorted_data)
+        
+        # Create figure
+        fig, ax = plt.subplots(figsize=(12, 8))
+        
+        # Create color gradient based on accuracy
+        colors = []
+        for acc in sorted_accuracies:
+            if acc >= 0.8:
+                colors.append(self.colors['success'])
+            elif acc >= 0.6:
+                colors.append(self.colors['primary'])
+            elif acc >= 0.4:
+                colors.append(self.colors['secondary'])
+            else:
+                colors.append(self.colors['warning'])
+        
+        # Create horizontal bar chart
+        bars = ax.barh(range(len(sorted_names)), sorted_accuracies, 
+                      color=colors, alpha=0.8, edgecolor='white', linewidth=1.5)
+        
+        # Customize the plot
+        ax.set_yticks(range(len(sorted_names)))
+        ax.set_yticklabels(sorted_names, fontsize=10)
+        ax.set_xlabel('Accuracy Score', fontsize=12, fontweight='bold')
+        ax.set_title('Machine Learning Model Accuracy by Geological Field\n' + 
+                    'Predicting Characteristics from Field Descriptions', 
+                    fontsize=14, fontweight='bold', pad=20)
+        
+        # Add accuracy values on bars
+        for i, (bar, acc) in enumerate(zip(bars, sorted_accuracies)):
+            ax.text(acc + 0.01, i, f'{acc:.3f}', 
+                   va='center', ha='left', fontweight='bold', fontsize=9)
+        
+        # Add vertical lines for reference
+        ax.axvline(x=0.5, color='gray', linestyle='--', alpha=0.5, linewidth=1)
+        ax.axvline(x=0.7, color='gray', linestyle='--', alpha=0.5, linewidth=1)
+        ax.axvline(x=0.9, color='gray', linestyle='--', alpha=0.5, linewidth=1)
+        
+        # Add legend for color coding
+        legend_elements = [
+            mpatches.Patch(color=self.colors['success'], label='Excellent (≥80%)'),
+            mpatches.Patch(color=self.colors['primary'], label='Good (60-80%)'),
+            mpatches.Patch(color=self.colors['secondary'], label='Fair (40-60%)'),
+            mpatches.Patch(color=self.colors['warning'], label='Poor (<40%)')
+        ]
+        ax.legend(handles=legend_elements, loc='upper right', fontsize=10)
+        
+        # Set x-axis limits
+        ax.set_xlim(0, 1.1)
+        
+        # Add grid
+        ax.grid(True, axis='x', alpha=0.3)
+        
+        # Improve layout
+        plt.tight_layout()
+        
+        # Save the plot
+        plt.savefig(save_path, dpi=300, bbox_inches='tight', facecolor='white')
+        print(f"Accuracy plot saved as: {save_path}")
+        
+        plt.show()
+        
+        return fig, ax
+    
+    def plot_prediction_scatter(self, ml_model, X, y, field_name, save_path=None):
+        """
+        Create a scatter plot comparing actual vs predicted values for a specific field
+        """
+        if field_name not in ml_model.models:
+            print(f"No trained model found for field: {field_name}")
+            return None, None
+        
+        # Get the model and data
+        model = ml_model.models[field_name]
+        label_encoder = ml_model.label_encoders[field_name]
+        
+        # Prepare data
+        X_vectorized = ml_model.vectorizer.transform(X)
+        y_actual = y[field_name]
+        y_encoded_actual = label_encoder.transform(y_actual)
+        
+        # Make predictions on the full dataset
+        y_pred_encoded = model.predict(X_vectorized)
+        y_pred = label_encoder.inverse_transform(y_pred_encoded)
+        
+        # Get unique categories and assign colors
+        unique_categories = label_encoder.classes_
+        n_categories = len(unique_categories)
+        
+        # Use a subset of our colorblind-friendly palette
+        category_colors = self.palette[:min(n_categories, len(self.palette))]
+        if n_categories > len(self.palette):
+            # Generate additional colors if needed
+            additional_colors = plt.cm.Set3(np.linspace(0, 1, n_categories - len(self.palette)))
+            category_colors.extend(additional_colors)
+        
+        # Create color mapping
+        color_map = dict(zip(unique_categories, category_colors))
+        
+        # Create figure with subplots
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 7))
+        
+        # Plot 1: Confusion Matrix as Scatter Plot
+        # Create numeric mapping for scatter plot
+        cat_to_num = {cat: i for i, cat in enumerate(unique_categories)}
+        
+        x_coords = [cat_to_num[cat] for cat in y_actual]
+        y_coords = [cat_to_num[cat] for cat in y_pred]
+        
+        # Add jitter to see overlapping points
+        jitter_strength = 0.1
+        x_jittered = [x + np.random.uniform(-jitter_strength, jitter_strength) for x in x_coords]
+        y_jittered = [y + np.random.uniform(-jitter_strength, jitter_strength) for y in y_coords]
+        
+        # Color points by whether prediction is correct
+        point_colors = [self.colors['success'] if actual == pred else self.colors['warning'] 
+                       for actual, pred in zip(y_actual, y_pred)]
+        
+        # Create scatter plot
+        scatter = ax1.scatter(x_jittered, y_jittered, c=point_colors, alpha=0.6, s=50, edgecolors='white', linewidth=0.5)
+        
+        # Add diagonal line for perfect predictions
+        ax1.plot([0, n_categories-1], [0, n_categories-1], 'k--', alpha=0.5, linewidth=2, label='Perfect Prediction')
+        
+        # Customize first plot
+        ax1.set_xticks(range(n_categories))
+        ax1.set_yticks(range(n_categories))
+        ax1.set_xticklabels(unique_categories, rotation=45, ha='right')
+        ax1.set_yticklabels(unique_categories)
+        ax1.set_xlabel('Actual Categories', fontsize=12, fontweight='bold')
+        ax1.set_ylabel('Predicted Categories', fontsize=12, fontweight='bold')
+        ax1.set_title(f'Actual vs Predicted: {field_name.replace("_", " ").title()}', 
+                     fontsize=14, fontweight='bold')
+        
+        # Add legend for correct/incorrect predictions
+        correct_patch = mpatches.Patch(color=self.colors['success'], label='Correct Prediction')
+        incorrect_patch = mpatches.Patch(color=self.colors['warning'], label='Incorrect Prediction')
+        ax1.legend(handles=[correct_patch, incorrect_patch], loc='upper left')
+        
+        ax1.grid(True, alpha=0.3)
+        
+        # Plot 2: Category Distribution Comparison
+        actual_counts = pd.Series(y_actual).value_counts()
+        pred_counts = pd.Series(y_pred).value_counts()
+        
+        # Ensure all categories are represented
+        all_categories = unique_categories
+        actual_counts = actual_counts.reindex(all_categories, fill_value=0)
+        pred_counts = pred_counts.reindex(all_categories, fill_value=0)
+        
+        x = np.arange(len(all_categories))
+        width = 0.35
+        
+        bars1 = ax2.bar(x - width/2, actual_counts.values, width, 
+                       label='Actual', color=self.colors['primary'], alpha=0.8)
+        bars2 = ax2.bar(x + width/2, pred_counts.values, width,
+                       label='Predicted', color=self.colors['secondary'], alpha=0.8)
+        
+        # Customize second plot
+        ax2.set_xlabel('Categories', fontsize=12, fontweight='bold')
+        ax2.set_ylabel('Count', fontsize=12, fontweight='bold')
+        ax2.set_title(f'Distribution Comparison: {field_name.replace("_", " ").title()}', 
+                     fontsize=14, fontweight='bold')
+        ax2.set_xticks(x)
+        ax2.set_xticklabels(all_categories, rotation=45, ha='right')
+        ax2.legend()
+        ax2.grid(True, alpha=0.3, axis='y')
+        
+        # Add value labels on bars
+        for bars in [bars1, bars2]:
+            for bar in bars:
+                height = bar.get_height()
+                if height > 0:
+                    ax2.annotate(f'{int(height)}',
+                               xy=(bar.get_x() + bar.get_width() / 2, height),
+                               xytext=(0, 3),  # 3 points vertical offset
+                               textcoords="offset points",
+                               ha='center', va='bottom', fontsize=8)
+        
+        # Overall title
+        fig.suptitle(f'Prediction Analysis for {field_name.replace("_", " ").title()}', 
+                    fontsize=16, fontweight='bold', y=1.02)
+        
+        plt.tight_layout()
+        
+        # Save the plot
+        if save_path is None:
+            save_path = f'prediction_scatter_{field_name}.png'
+        
+        plt.savefig(save_path, dpi=300, bbox_inches='tight', facecolor='white')
+        print(f"Prediction scatter plot saved as: {save_path}")
+        
+        plt.show()
+        
+        return fig, (ax1, ax2)
+    
+    def plot_model_summary(self, ml_model, X, y, results, save_path='ml_summary.png'):
+        """
+        Create a comprehensive summary plot with multiple panels
+        """
+        # Create figure with subplots
+        fig = plt.figure(figsize=(20, 12))
+        gs = fig.add_gridspec(2, 3, height_ratios=[1, 1], width_ratios=[2, 1, 1])
+        
+        # Panel 1: Accuracy bars (spans two columns)
+        ax1 = fig.add_subplot(gs[0, :2])
+        
+        # Prepare accuracy data
+        fields = list(results.keys())
+        accuracies = list(results.values())
+        display_names = [field.replace('_', ' ').title() for field in fields]
+        
+        # Sort by accuracy
+        sorted_data = sorted(zip(display_names, accuracies), key=lambda x: x[1], reverse=True)
+        sorted_names, sorted_accuracies = zip(*sorted_data)
+        
+        # Color based on performance
+        colors = []
+        for acc in sorted_accuracies:
+            if acc >= 0.8:
+                colors.append(self.colors['success'])
+            elif acc >= 0.6:
+                colors.append(self.colors['primary'])
+            elif acc >= 0.4:
+                colors.append(self.colors['secondary'])
+            else:
+                colors.append(self.colors['warning'])
+        
+        bars = ax1.barh(range(len(sorted_names)), sorted_accuracies, color=colors, alpha=0.8)
+        ax1.set_yticks(range(len(sorted_names)))
+        ax1.set_yticklabels(sorted_names)
+        ax1.set_xlabel('Accuracy Score')
+        ax1.set_title('Model Performance by Field', fontweight='bold', fontsize=14)
+        
+        # Add accuracy values
+        for i, (bar, acc) in enumerate(zip(bars, sorted_accuracies)):
+            ax1.text(acc + 0.01, i, f'{acc:.3f}', va='center', fontweight='bold')
+        
+        # Panel 2: Data coverage
+        ax2 = fig.add_subplot(gs[0, 2])
+        
+        coverage_data = []
+        coverage_labels = []
+        for field in fields:
+            if field in y:
+                non_unknown = sum(y[field] != 'Unknown')
+                total = len(y[field])
+                coverage = non_unknown / total
+                coverage_data.append(coverage)
+                coverage_labels.append(field.replace('_', ' ').title()[:15] + '...' if len(field) > 15 else field.replace('_', ' ').title())
+        
+        # Pie chart for average data coverage
+        avg_coverage = np.mean(coverage_data)
+        coverage_pie = [avg_coverage, 1 - avg_coverage]
+        colors_pie = [self.colors['primary'], self.colors['light']]
+        
+        ax2.pie(coverage_pie, labels=['Available Data', 'Missing/Unknown'], 
+               colors=colors_pie, autopct='%1.1f%%', startangle=90)
+        ax2.set_title('Average Data Coverage', fontweight='bold')
+        
+        # Panel 3: Model complexity (bottom left)
+        ax3 = fig.add_subplot(gs[1, 0])
+        
+        complexity_data = []
+        complexity_labels = []
+        for field in fields:
+            if field in y:
+                unique_classes = len(y[field].unique())
+                complexity_data.append(unique_classes)
+                complexity_labels.append(field.replace('_', ' ').title())
+        
+        bars3 = ax3.bar(range(len(complexity_data)), complexity_data, 
+                       color=self.palette[:len(complexity_data)], alpha=0.8)
+        ax3.set_xticks(range(len(complexity_labels)))
+        ax3.set_xticklabels(complexity_labels, rotation=45, ha='right')
+        ax3.set_ylabel('Number of Categories')
+        ax3.set_title('Model Complexity (Categories per Field)', fontweight='bold')
+        
+        # Panel 4: Performance distribution (bottom middle)
+        ax4 = fig.add_subplot(gs[1, 1])
+        
+        ax4.hist(accuracies, bins=10, color=self.colors['primary'], alpha=0.7, edgecolor='white')
+        ax4.axvline(np.mean(accuracies), color=self.colors['warning'], 
+                   linestyle='--', linewidth=2, label=f'Mean: {np.mean(accuracies):.3f}')
+        ax4.set_xlabel('Accuracy Score')
+        ax4.set_ylabel('Number of Models')
+        ax4.set_title('Accuracy Distribution', fontweight='bold')
+        ax4.legend()
+        
+        # Panel 5: Sample text analysis (bottom right)
+        ax5 = fig.add_subplot(gs[1, 2])
+        
+        # Get text length statistics
+        text_lengths = [len(desc) for desc in X]
+        ax5.boxplot(text_lengths, patch_artist=True, 
+                   boxprops=dict(facecolor=self.colors['accent'], alpha=0.7))
+        ax5.set_ylabel('Description Length (characters)')
+        ax5.set_title('Field Description Lengths', fontweight='bold')
+        ax5.set_xticklabels(['All Descriptions'])
+        
+        # Overall title
+        fig.suptitle('Earthquake Field Data ML Model - Comprehensive Analysis', 
+                    fontsize=18, fontweight='bold', y=0.98)
+        
+        plt.tight_layout()
+        plt.savefig(save_path, dpi=300, bbox_inches='tight', facecolor='white')
+        print(f"Summary plot saved as: {save_path}")
+        
+        plt.show()
+        
+        return fig
+
 
 def main():
     print("Consolidated Earthquake Field Data ML Model")
@@ -528,7 +878,7 @@ def main():
     ml_model = ConsolidatedEarthquakeML()
     
     # Load and prepare data
-    csv_file = 'consolidated_earthquake_observations_20250807.csv'  # Update path as needed
+    csv_file = 'consolidated_earthquake_observations_20250808.csv'  # Update path as needed
     X, y, df = ml_model.load_and_prepare_data(csv_file)
     
     if len(X) == 0:
@@ -545,8 +895,70 @@ def main():
     # Evaluate models
     results = ml_model.evaluate_models(X, y)
     
-    # Demonstrate predictions
-    ml_model.demonstrate_predictions(X, y, n_samples=3)
+    print(f"\n{'='*60}")
+    print("GENERATING VISUALIZATIONS")
+    print(f"{'='*60}")
+    
+    # CREATE PLOTS - UPDATED SECTION TO GENERATE ALL SCATTER PLOTS
+    try:
+        # Initialize visualizer
+        visualizer = EarthquakeMLVisualizer()
+        
+        # Plot 1: Model accuracies bar chart
+        print("Creating accuracy comparison chart...")
+        visualizer.plot_model_accuracies(results, 'earthquake_ml_accuracies.png')
+        
+        # Plot 2: Generate scatter plots for ALL trained models
+        print(f"\nGenerating scatter plots for all {len(ml_model.models)} trained models...")
+        generated_plots = []
+        
+        for i, field in enumerate(ml_model.models.keys(), 1):
+            print(f"  [{i}/{len(ml_model.models)}] Creating scatter plot for: {field}")
+            try:
+                filename = f'prediction_scatter_{field}.png'
+                visualizer.plot_prediction_scatter(ml_model, X, y, field, filename)
+                generated_plots.append(filename)
+            except Exception as e:
+                print(f"    Error creating scatter plot for {field}: {e}")
+        
+        # Plot 3: Comprehensive summary dashboard
+        print("\nCreating comprehensive summary dashboard...")
+        visualizer.plot_model_summary(ml_model, X, y, results, 'earthquake_ml_summary.png')
+        
+        print(f"\nAll visualizations generated successfully!")
+        print(f"Generated files:")
+        print(f"  - earthquake_ml_accuracies.png (accuracy bar chart)")
+        print(f"  - earthquake_ml_summary.png (comprehensive dashboard)")
+        print(f"  - {len(generated_plots)} scatter plot files:")
+        for plot_file in generated_plots:
+            print(f"    - {plot_file}")
+        
+    except Exception as e:
+        print(f"Error generating plots: {e}")
+        print("Continuing without visualizations...")
+    
+    # Example predictions on sample descriptions
+    print(f"\n{'='*60}")
+    print("SAMPLE PREDICTIONS")
+    print(f"{'='*60}")
+    
+    # Test with a few sample descriptions if available
+    sample_descriptions = [
+        "Observed surface rupture with right-lateral offset of approximately 15 cm. Clear scarp facing north with visible gouge material in fault zone.",
+        "Ground cracks observed with minor vertical displacement. No clear fault orientation visible. Sandy soil conditions.",
+        "Well-defined fault scarp with striations visible on fault plane. Left-lateral motion evident from offset features."
+    ]
+    
+    for i, desc in enumerate(sample_descriptions, 1):
+        print(f"\nSample {i}: {desc[:80]}...")
+        predictions = ml_model.predict_from_description(desc)
+        
+        print("Predictions:")
+        for field, pred_info in predictions.items():
+            if 'error' not in pred_info:
+                print(f"  {field.replace('_', ' ').title()}: {pred_info['prediction']} (confidence: {pred_info['confidence']:.2f})")
+            else:
+                print(f"  {field.replace('_', ' ').title()}: Error - {pred_info['error']}")
     
     print(f"\n{'='*60}")
     print("ANALYSIS COMPLETE")
@@ -554,6 +966,7 @@ def main():
     print(f"Total samples processed: {len(X)}")
     print(f"Models trained: {successful_models}")
     print(f"Average model performance: {np.mean(list(results.values())):.3f}" if results else "N/A")
+    print(f"Scatter plots generated: {len(generated_plots) if 'generated_plots' in locals() else 0}")
     print(f"Analysis completed at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
 if __name__ == "__main__":
